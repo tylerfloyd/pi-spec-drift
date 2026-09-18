@@ -1,0 +1,105 @@
+name: Spec Drift (reusable)
+
+# Called from other repositories:
+#   jobs:
+#     spec-drift:
+#       permissions: { pull-requests: write }
+#       uses: tylerfloyd/pi-spec-drift/.github/workflows/spec-drift.yml@main
+#       secrets:
+#         TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
+#         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#       with:
+#         owner: ${{ github.event.pull_request.base.repo.owner.login }}
+#         repo: ${{ github.event.pull_request.base.repo.name }}
+#         pr-number: ${{ github.event.pull_request.number }}
+#         base: ${{ github.event.pull_request.base.sha }}
+#         head: ${{ github.event.pull_request.head.sha }}
+#         pr-title: ${{ github.event.pull_request.title }}
+#         pr-desc: ${{ github.event.pull_request.body }}
+#         spec-glob: "PRODUCT.md,TECH.md,docs/spec*.md"
+#         block: "false"
+
+on:
+  workflow_call:
+    inputs:
+      owner:
+        required: true
+      repo:
+        required: true
+      pr-number:
+        required: true
+      base:
+        required: true
+      head:
+        required: true
+      pr-title:
+        required: false
+        default: ""
+      pr-desc:
+        required: false
+        default: ""
+      spec-glob:
+        required: false
+        default: ""
+      block:
+        required: false
+        default: "false"
+      bot-ref:
+        required: false
+        default: "main"
+      repository:
+        required: false
+        default: "tylerfloyd/pi-spec-drift"
+    secrets:
+      TYPESAFE_API_KEY:
+        required: true
+      GITHUB_TOKEN:
+        required: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the pull request
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.owner }}/${{ inputs.repo }}
+          ref: ${{ inputs.head }}
+          fetch-depth: 0
+
+      - name: Run spec-drift review
+        uses: ./action.yml
+        with:
+          api-key: ${{ secrets.TYPESAFE_API_KEY }}
+          repository: ${{ inputs.repository }}
+          bot-ref: ${{ inputs.bot-ref }}
+          spec-glob: ${{ inputs.spec-glob }}
+          block: ${{ inputs.block }}
+          base: ${{ inputs.base }}
+          head: ${{ inputs.head }}
+          pr-title: ${{ inputs.pr-title }}
+          pr-desc: ${{ inputs.pr-desc }}
+          repo-label: ${{ inputs.owner }}/${{ inputs.repo }}
+
+      - name: Post report to the pull request
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require("fs");
+            const file = process.env.GITHUB_WORKSPACE + "/.specdrift-report.md";
+            const body = fs.existsSync(file)
+              ? fs.readFileSync(file, "utf8")
+              : "> ⛔ Spec drift review did not produce a report.";
+            await github.rest.issues.createComment({
+              owner: "${{ inputs.owner }}",
+              repo: "${{ inputs.repo }}",
+              issue_number: Number("${{ inputs.pr-number }}"),
+              body,
+            });
+            core.info("posted spec-drift report to PR #" + "${{ inputs.pr-number }}");

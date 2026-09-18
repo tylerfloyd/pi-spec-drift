@@ -1,0 +1,10 @@
+diff --git a/src/weather.ts b/src/weather.ts
+index 1111111..2222222 100644
+--- a/src/weather.ts
++++ b/src/weather.ts
+@@ -10,6 +10,8 @@
+ export function printConditions(c: City, cond: Conditions) {
+   console.log(`${c.name}: ${cond.temp}C`);
++  console.log(`humidity ${cond.humidity}%`);
++  console.log(`wind ${cond.wind} km/h`);
+ }

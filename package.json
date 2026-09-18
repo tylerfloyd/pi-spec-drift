@@ -1,0 +1,47 @@
+{
+  "name": "pi-spec-drift",
+  "version": "0.1.0",
+  "description": "A spec-drift review bot for Pi, backed by Jev (TypeSafe). Reviews a change against your spec and reports drift with calibrated probabilities.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Boyd",
+  "homepage": "https://github.com/tylerfloyd/pi-spec-drift",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tylerfloyd/pi-spec-drift.git"
+  },
+  "keywords": [
+    "pi",
+    "pi-package",
+    "spec",
+    "spec-drift",
+    "typesafe",
+    "jev",
+    "github-action",
+    "review",
+    "ci"
+  ],
+  "bin": {
+    "specdrift": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "action.yml",
+    "README.md",
+    "SECURITY.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node --test test/*.test.ts",
+    "start": "node dist/cli.js"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.6.0"
+  }
+}

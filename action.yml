@@ -1,0 +1,80 @@
+name: "Spec Drift Review"
+description: "Review a change against the spec using Jev (TypeSafe). Writes a markdown report and a JSON summary into the workspace."
+inputs:
+  api-key:
+    description: "TypeSafe API key (from the TYPESAFE_API_KEY repository secret)."
+    required: true
+  repository:
+    description: "Git repository that contains the pi-spec-drift source to build and run."
+    required: false
+    default: "tylerfloyd/pi-spec-drift"
+  bot-ref:
+    description: "Branch, tag, or commit of the pi-spec-drift source to run."
+    required: false
+    default: "main"
+  spec-glob:
+    description: "Comma-separated glob(s) for spec files. Overrides the repo's .spec-drift.json."
+    required: false
+  block:
+    description: "Set to \"true\" to fail the run on clear drift. Default: advisory."
+    required: false
+    default: "false"
+  model:
+    description: "TypeSafe model alias."
+    required: false
+    default: "jev-latest"
+  base:
+    description: "Base git ref to diff against (used with head)."
+    required: false
+  head:
+    description: "Head git ref to diff from."
+    required: false
+  pr-title:
+    description: "Pull request title (context for Jev)."
+    required: false
+  pr-desc:
+    description: "Pull request description (context for Jev)."
+    required: false
+  repo-label:
+    description: "owner/repo label for the report footer."
+    required: false
+runs:
+  using: "composite"
+  steps:
+    - name: Fetch pi-spec-drift source
+      uses: actions/checkout@v4
+      with:
+        repository: ${{ inputs.repository }}
+        ref: ${{ inputs.bot-ref }}
+        path: _specdrift
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+
+    - name: Install and build
+      working-directory: _specdrift
+      shell: bash
+      run: npm ci && npm run build
+
+    - name: Run spec-drift review
+      working-directory: _specdrift
+      shell: bash
+      env:
+        TYPESAFE_API_KEY: ${{ inputs.api-key }}
+      run: |
+        ARGS=(review --root "$GITHUB_WORKSPACE" \
+          --report-md "$GITHUB_WORKSPACE/.specdrift-report.md" \
+          --report-json "$GITHUB_WORKSPACE/.specdrift-report.json")
+        [ -n "${{ inputs.spec-glob }}" ] && ARGS+=(--spec-glob "${{ inputs.spec-glob }}")
+        [ -n "${{ inputs.model }}" ] && ARGS+=(--model "${{ inputs.model }}")
+        if [ -n "${{ inputs.base }}" ] && [ -n "${{ inputs.head }}" ]; then
+          ARGS+=(--base "${{ inputs.base }}" --head "${{ inputs.head }}")
+        fi
+        if [ -n "${{ inputs.pr-title }}" ]; then ARGS+=(--pr-title "${{ inputs.pr-title }}"); fi
+        if [ -n "${{ inputs.pr-desc }}" ]; then ARGS+=(--pr-desc "${{ inputs.pr-desc }}"); fi
+        if [ -n "${{ inputs.repo-label }}" ]; then ARGS+=(--repo "${{ inputs.repo-label }}"); fi
+        [ "${{ inputs.block }}" = "true" ] && ARGS+=(--block)
+        echo "specdrift ${ARGS[*]:0:1} (report files: .specdrift-report.md / .json)"
+        node dist/cli.js "${ARGS[@]}"
