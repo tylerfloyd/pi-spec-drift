@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.log
+.env
+.spec-drift-report.md
+.spec-drift-report.json
+.DS_Store
