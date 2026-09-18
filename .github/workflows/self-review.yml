@@ -1,0 +1,23 @@
+name: Spec Drift (self)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+jobs:
+  spec-drift:
+    permissions:
+      pull-requests: write
+    uses: tylerfloyd/pi-spec-drift/.github/workflows/spec-drift.yml@main
+    secrets:
+      TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    with:
+      owner: ${{ github.event.pull_request.base.repo.owner.login }}
+      repo: ${{ github.event.pull_request.base.repo.name }}
+      pr-number: ${{ github.event.pull_request.number }}
+      base: ${{ github.event.pull_request.base.sha }}
+      head: ${{ github.event.pull_request.head.sha }}
+      pr-title: ${{ github.event.pull_request.title }}
+      pr-desc: ${{ github.event.pull_request.body }}
+      spec-glob: "README.md,docs/design.md"

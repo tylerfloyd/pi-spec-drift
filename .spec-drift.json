@@ -1,0 +1,5 @@
+{
+  "specFiles": ["README.md", "docs/design.md"],
+  "blockOnDrift": false,
+  "model": "jev-latest"
+}
