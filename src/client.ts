@@ -96,7 +96,6 @@ export async function systemOne(
 
   const body: RawRequest = { state, model, questions };
 
-  let lastError: Error | undefined;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     if (attempt > 0) {
       const delay = retryBaseMs * Math.pow(2, attempt - 1);
@@ -106,32 +105,24 @@ export async function systemOne(
     try {
       const res = await doFetch(url, body, opts.apiKey, fetchImpl, timeoutMs);
       if (res.ok) {
-        const parsed = (await res.json()) as Partial<JevResponse>;
-        return validateResponse(parsed, Object.keys(questions));
+        return validateResponse(res.payload, questions);
       }
       if (res.status === 401 || res.status === 403) {
         throw new JevAuthError(`TypeSafe rejected the API key (HTTP ${res.status})`);
       }
       if (RETRYABLE.has(res.status)) {
-        const err = new JevRequestError(`TypeSafe HTTP ${res.status}`, res.status, true);
-        lastError = err;
         continue;
       }
-      const text = await res.text().catch(() => "");
-      throw new JevRequestError(
-        `TypeSafe HTTP ${res.status}: ${truncate(text, 300)}`,
-        res.status,
-      );
+      throw new JevRequestError(`TypeSafe HTTP ${res.status}`, res.status);
     } catch (e) {
       if (e instanceof JevAuthError || (e instanceof JevRequestError && !e.retryable)) {
         throw e;
       }
-      lastError = e instanceof Error ? e : new Error(String(e));
-      // network / fetch errors are retryable
+      // Network / fetch errors are retryable; never echo their raw messages.
     }
   }
   throw new JevRequestError(
-    `TypeSafe request failed after ${maxRetries + 1} attempts: ${lastError?.message}`,
+    `TypeSafe request failed after ${maxRetries + 1} attempts (network, timeout, or transient HTTP failure)`,
     undefined,
     false,
   );
@@ -143,11 +134,11 @@ async function doFetch(
   apiKey: string,
   fetchImpl: typeof fetch,
   timeoutMs: number,
-): Promise<Response> {
+): Promise<{ ok: boolean; status: number; payload?: unknown }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetchImpl(url, {
+    const response = await fetchImpl(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -155,16 +146,27 @@ async function doFetch(
       },
       body: JSON.stringify(body),
       signal: controller.signal,
+      redirect: "error",
     });
+    // Keep the timeout active until the response body has been consumed.
+    let payload: unknown;
+    if (response.ok) {
+      try { payload = await response.json(); }
+      catch { throw new JevRequestError("TypeSafe returned an unreadable JSON response"); }
+    } else {
+      await response.body?.cancel();
+    }
+    return { ok: response.ok, status: response.status, payload };
   } finally {
     clearTimeout(timer);
   }
 }
 
 function validateResponse(
-  parsed: Partial<JevResponse>,
-  expectedKeys: string[],
+  value: unknown,
+  questions: Record<string, Question>,
 ): JevResponse {
+  const parsed = value as Partial<JevResponse>;
   if (!parsed || typeof parsed !== "object") {
     throw new JevRequestError("TypeSafe returned a non-object response");
   }
@@ -172,28 +174,69 @@ function validateResponse(
   if (!answers || typeof answers !== "object") {
     throw new JevRequestError("TypeSafe response missing `answers` object");
   }
-  const missing = expectedKeys.filter((k) => !(k in answers));
+  const expectedKeys = Object.keys(questions);
+  const missing = expectedKeys.filter((k) => !Object.hasOwn(answers, k));
   if (missing.length > 0) {
     throw new JevRequestError(
       `TypeSafe response missing answers for: ${missing.join(", ")}`,
     );
   }
-  for (const k of expectedKeys) {
-    const a = answers[k];
-    if (typeof a !== "object" || a === null) continue;
-    if (a.type === "noul" && (typeof a.noul !== "number" || !isFinite(a.noul))) {
-      throw new JevRequestError(`TypeSafe returned a non-numeric noul for "${k}"`);
+  validateAnswers(answers, questions);
+  let usage: JevUsage | undefined;
+  if (parsed.usage !== undefined) {
+    const u = parsed.usage;
+    if (!isRecord(u) || !Number.isSafeInteger(u.input_tokens) || !Number.isSafeInteger(u.output_tokens) || u.input_tokens < 0 || u.output_tokens < 0) {
+      throw new JevRequestError("TypeSafe returned invalid usage metadata");
     }
+    usage = { input_tokens: u.input_tokens, output_tokens: u.output_tokens };
   }
   return {
     model: typeof parsed.model === "string" ? parsed.model : "jev-latest",
     answers: answers as Record<string, Answer>,
-    usage: parsed.usage as JevUsage | undefined,
+    usage,
   };
 }
 
-function truncate(s: string, n: number): string {
-  return s.length <= n ? s : s.slice(0, n) + "…";
+// Shared with the public evaluator: bypassing the HTTP client must not turn
+// malformed answers into CLEAN. Score indexes are zero-based per
+// https://docs.typesafe.ai/primitives/score (Levels / Response structure).
+export function validateAnswers(value: unknown, questions: Record<string, Question>): asserts value is Record<string, Answer> {
+  if (!isRecord(value)) throw new JevRequestError("TypeSafe response missing answers object");
+  for (const [key, q] of Object.entries(questions)) {
+    const a = value[key];
+    if (!Object.hasOwn(value, key) || !isRecord(a) || a.type !== q.type) {
+      throw new JevRequestError(`TypeSafe returned a missing or wrong-type answer for "${key}"`);
+    }
+    if (q.type === "noul") {
+      if (!probability(a.noul)) throw new JevRequestError(`TypeSafe returned an invalid noul for "${key}"`);
+      continue;
+    }
+    const n = q.criteria.length;
+    if (typeof a.score !== "number" || !Number.isFinite(a.score) || a.score < 0 || a.score > n - 1 || !probability(a.confidence)) {
+      throw new JevRequestError(`TypeSafe returned an invalid score or confidence for "${key}"`);
+    }
+    const probs = a.probabilities;
+    const legend = a.legend;
+    if (!isRecord(probs) || !isRecord(legend) || Object.keys(probs).length !== n || Object.keys(legend).length !== n) {
+      throw new JevRequestError(`TypeSafe returned an incomplete score distribution for "${key}"`);
+    }
+    let sum = 0;
+    for (let i = 0; i < n; i++) {
+      const p = probs[String(i)];
+      if (!Object.hasOwn(probs, String(i)) || !probability(p) || typeof legend[String(i)] !== "string") {
+        throw new JevRequestError(`TypeSafe returned an invalid score level for "${key}"`);
+      }
+      sum += p;
+    }
+    if (Math.abs(sum - 1) > 1e-6) throw new JevRequestError(`TypeSafe probabilities do not sum to one for "${key}"`);
+  }
+}
+
+function isRecord(x: unknown): x is Record<string, unknown> {
+  return !!x && typeof x === "object" && !Array.isArray(x);
+}
+function probability(x: unknown): x is number {
+  return typeof x === "number" && Number.isFinite(x) && x >= 0 && x <= 1;
 }
 
 function sleep(ms: number): Promise<void> {

@@ -11,12 +11,17 @@ export function diffFromFile(path: string): string {
 }
 
 export function diffFromGit(root: string, base: string, head: string): string {
+  // Reject options disguised as refs and prevent local diff/textconv helpers
+  // from executing code while inspecting an untrusted change.
+  if (!base || !head || base.startsWith("-") || head.startsWith("-")) {
+    throw new Error("Invalid git revision");
+  }
   // `base...head` = diff from the merge-base of base and head to head.
   let out: string;
   try {
     out = execFileSync(
       "git",
-      ["-C", root, "diff", "--no-color", `${base}...${head}`],
+      ["-C", root, "diff", "--no-color", "--no-ext-diff", "--no-textconv", `${base}...${head}`, "--"],
       { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] },
     );
   } catch (e) {

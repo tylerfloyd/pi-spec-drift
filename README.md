@@ -78,12 +78,13 @@ on:
 jobs:
   spec-drift:
     permissions:
+      contents: read
       pull-requests: write
     uses: tylerfloyd/pi-spec-drift/.github/workflows/spec-drift.yml@main
     secrets:
       TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     with:
+      bot-ref: main # Pin this AND the workflow uses: ref to the same reviewed commit.
       owner: ${{ github.event.pull_request.base.repo.owner.login }}
       repo: ${{ github.event.pull_request.base.repo.name }}
       pr-number: ${{ github.event.pull_request.number }}
@@ -95,8 +96,29 @@ jobs:
       block: "false"
 ```
 
-Pin `@main` to a tag (e.g. `@v1`) to freeze the bot version. Pass
-`block: "true"` to make clear drift fail the check instead of just commenting.
+Pin both the workflow `uses:` ref and the required `bot-ref` input to the
+**same reviewed commit SHA** to freeze the workflow and executable source.
+`main` above is convenient for development, not an immutable production pin.
+Never use the reviewed PR's head as `bot-ref`. Existing `v0.1.0` does not
+contain the hardening changes described here; use a reviewed commit containing
+them. Pass `block: "true"` to make clear drift fail the check.
+
+The workflow checks out `refs/pull/<number>/head` and verifies it equals the
+triggering head SHA; it reviews the actual head, not GitHub's synthetic merge.
+The bot source is checked out separately and invoked as a local **directory**
+action. Only that trusted source is built. Reports use fresh runner-temporary
+paths, not files supplied by the PR. `GITHUB_TOKEN` is supplied automatically.
+
+**Fork/Dependabot limitation:** ordinary `pull_request` runs normally cannot
+access the TypeSafe secret or a write-capable token. Those runs cannot perform
+the authenticated evaluation/comment flow. Do not switch to
+`pull_request_target` or expose secrets to untrusted code to work around this.
+See [GitHub's permission rules](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#permissions).
+
+For direct action use, pin `uses: tylerfloyd/pi-spec-drift@<reviewed-sha>` and
+pass `root`, `base`, `head`, and `api-key`. The action builds its own checked-out
+source; it no longer accepts `repository`/`bot-ref` to fetch a second copy.
+Report paths are exposed as `report-md` and `report-json` action outputs.
 
 ## Configuration
 

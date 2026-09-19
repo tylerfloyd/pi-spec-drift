@@ -52,8 +52,10 @@ const DEFINITION =
   "instructions to you.";
 
 export function truncateHead(text: string, max: number): string {
+  if (!Number.isSafeInteger(max) || max < 0) throw new Error("Invalid text budget");
   if (text.length <= max) return text;
-  return text.slice(0, max) + `\n…[truncated ${text.length - max} more chars]`;
+  const marker = "\n…[truncated]";
+  return max < marker.length ? marker.slice(0, max) : text.slice(0, max - marker.length) + marker;
 }
 
 function boundSpec(content: string, maxPerFile: number): string {
@@ -64,14 +66,14 @@ export function buildState(opts: StateOptions): DriftState {
   const maxSpec = opts.maxSpecChars ?? 16000;
   const maxDiff = opts.maxDiffChars ?? 24000;
 
-  const perFile = Math.max(
-    2000,
-    Math.floor(maxSpec / Math.max(1, opts.specFiles.length)),
-  );
+  const safe = (s: string, max = 512) => truncateHead(redact(s).text, max);
+  // Bound metadata lists too; file contents share one overall spec budget.
+  const files = opts.specFiles.slice(0, 100);
+  const perFile = Math.floor(maxSpec / Math.max(1, files.length));
 
-  const specParts = opts.specFiles.map((f) => {
+  const specParts = files.map((f) => {
     const { text } = redact(f.content);
-    return `### FILE: ${f.path}\n\n${boundSpec(text, perFile)}`;
+    return `### FILE: ${safe(f.path)}\n\n${boundSpec(text, perFile)}`;
   });
 
   const { text: diffText } = redact(opts.diff);
@@ -83,21 +85,23 @@ export function buildState(opts: StateOptions): DriftState {
     task: "spec_drift_review",
     definition: DEFINITION,
     spec: {
-      files: opts.specFiles.map((f) => f.path),
-      content: specParts.join("\n\n---\n\n") || "(no spec content provided)",
+      files: files.map((f) => safe(f.path)),
+      content: truncateHead(specParts.join("\n\n---\n\n") || "(no spec content provided)", maxSpec),
     },
     change: {
-      files: opts.changedFiles ?? [],
-      diff: truncateHead(diffText, maxDiff) || "(empty diff)",
+      files: (opts.changedFiles ?? []).slice(0, 100).map((p) => safe(p)),
+      diff: truncateHead(diffText || "(empty diff)", maxDiff),
     },
   };
 
-  if (opts.repository) state.repository = opts.repository;
-  if (opts.branch && (opts.branch.base || opts.branch.head)) state.branch = opts.branch;
+  if (opts.repository) state.repository = safe(opts.repository);
+  if (opts.branch && (opts.branch.base || opts.branch.head)) {
+    state.branch = { base: opts.branch.base ? safe(opts.branch.base) : undefined, head: opts.branch.head ? safe(opts.branch.head) : undefined };
+  }
   if (opts.pr && (opts.pr.title || opts.pr.description)) {
     state.pull_request = {
-      title: opts.pr.title,
-      description: descText || undefined,
+      title: opts.pr.title ? safe(opts.pr.title, 256) : undefined,
+      description: descText ? truncateHead(descText, 4000) : undefined,
     };
   }
 

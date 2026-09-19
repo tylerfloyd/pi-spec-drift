@@ -14,8 +14,11 @@ in code.
 
 ## 2. Inputs
 
-- **The change** is a unified diff, either read from a file or computed by
-  `git diff <base>...<head>` in the repository root.
+- **The change** is a git-format unified diff, either read from a file or computed by
+  `git diff <base>...<head>` in the repository root. A source must be supplied;
+  omitting both forms is a usage error (exit 2). External diff/textconv helpers
+  are disabled. Output report paths resolve against the process working directory,
+  independently of `--root`; CI passes absolute paths.
 - **The spec** is the set of files matched by the configured `specFiles`
   globs, minus any file matched by `excludeGlobs`.
 - **Context** is the pull-request title and description when provided.
@@ -30,8 +33,12 @@ the matched spec file contents, and the change's diff.
   credentials — GitHub tokens, AWS keys, `sk-` API keys, Slack tokens, PEM
   private keys, `Bearer` tokens, JWTs, and `KEY/TOKEN/SECRET/PASSWORD`
   assignments — are replaced with a `[REDACTED:…]` marker before transmission.
+  This is best-effort pattern matching, not proof that arbitrary secrets are absent.
 - The spec and the diff are each **bounded** by `maxSpecChars` /
   `maxDiffChars` and truncated with an explicit marker when they exceed them.
+- PR titles/descriptions are bounded to 256/4000 characters. Repository/ref/path
+  metadata strings are bounded to 512 characters; file lists include at most 100
+  entries. Spec/diff budgets include truncation markers. Symlinks are skipped.
 - File contents of non-spec files, assistant output, and prior terminal output
   are **never** sent.
 
@@ -54,7 +61,10 @@ Each Noul with threshold `t` is classified: **satisfied** if `p ≥ t`,
 - **DRIFT** if any Noul is violated, or the `drift_level` headline is
   *Significant drift* or *Contradiction* with top-level probability ≥ its
   threshold.
-- else **REVIEW** if any Noul is unclear, or the headline is *Minor drift*.
+- else **REVIEW** if any Noul is unclear, the headline is *Minor drift*, or
+  a modal *Significant drift*/*Contradiction* level is below its threshold.
+  Score levels use the documented zero-based criterion indexes, never returned
+  legend wording ([TypeSafe Score contract](https://docs.typesafe.ai/primitives/score)).
 - else **CLEAN**.
 
 ## 6. Fail-closed guarantees
@@ -66,10 +76,14 @@ Each Noul with threshold `t` is classified: **satisfied** if `p ≥ t`,
   malformed/incomplete answer, the verdict is **NOT EVALUATED** and the run
   exits non-zero. Transient `429`/`529` are retried with backoff before giving
   up.
-- If the diff is empty, the verdict is **CLEAN** with a note (there is nothing
-  to compare).
+- An explicitly supplied, genuinely empty diff yields **CLEAN** with a note
+  (the deliberate no-API exception). Nonempty input that filters to nothing,
+  or contains no supported diff sections, is **NOT EVALUATED**, never CLEAN.
 - If no spec files matched the configured globs, the verdict is **NOT
-  EVALUATED** with a reason (there is no spec to compare against).
+  EVALUATED** with a reason (there is no spec to compare against). Matched but
+  entirely whitespace-only specs also fail closed. Malformed answers include
+  missing/wrong types, non-finite or out-of-range numbers, and incomplete or
+  non-normalized Score distributions (sum tolerance 1e-6).
 
 ## 7. CI behavior
 
@@ -77,7 +91,12 @@ Each Noul with threshold `t` is classified: **satisfied** if `p ≥ t`,
   for CLEAN, REVIEW, and even DRIFT.
 - When `blockOnDrift` is set, a DRIFT verdict (and any NOT_EVALUATED) makes
   the check fail.
-- The report comment is posted even when the check fails.
+- A freshly generated report is posted even when the evaluation step fails,
+  provided GitHub grants comment permission. Checkout/build failures may yield
+  no report. Reports are never read from the PR checkout.
+- The reusable workflow requires explicit trusted `bot-ref`; production callers
+  pin it and the workflow to the same reviewed commit. Fork/Dependabot runs may
+  lack secrets/write permissions and are not automatically privileged.
 
 ## 8. Boundaries
 
@@ -85,5 +104,8 @@ Each Noul with threshold `t` is classified: **satisfied** if `p ≥ t`,
   changed code and does not parse it into an AST.
 - Jev is a probabilistic model; a probability near a threshold may flip between
   runs. Bands (not point estimates) are the unit of decision.
+- Specs and configuration from the PR remain untrusted advisory inputs. Rejecting
+  all-excluded diffs does not prevent selective exclusions, changed specs, or
+  altered thresholds from influencing a verdict. This is not a tamper-proof gate.
 - The bot does not manage the API key's lifecycle; it only reads it from the
   environment and never logs it.

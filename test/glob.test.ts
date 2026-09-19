@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { globToRegExp, matchGlobs } from "../dist/glob.js";
@@ -49,4 +49,23 @@ test("matchGlobs with ** reaches nested dirs", () => {
   writeFileSync(join(root, "docs", "specs", "deep.md"), "spec");
   const matches = matchGlobs(root, ["docs/**/*.md"], []);
   assert.deepEqual(matches.sort(), ["docs/spec-auth.md", "docs/specs/deep.md"]);
+});
+
+test("does not follow symlinked directories (loop and escape guard)", { timeout: 5000 }, () => {
+  const root = mkdtempSync(join(tmpdir(), "specdrift-glob3-"));
+  const outside = mkdtempSync(join(tmpdir(), "specdrift-outside-"));
+  try {
+    mkdirSync(join(root, "docs"));
+    writeFileSync(join(root, "docs", "spec-a.md"), "spec");
+    writeFileSync(join(outside, "spec-outside.md"), "spec");
+    // points outside the repository root...
+    symlinkSync(outside, join(root, "docs", "link-out"));
+    // ...and this one loops back into itself
+    symlinkSync(join(root, "docs"), join(root, "docs", "self"));
+    const matches = matchGlobs(root, ["**/*.md"], []);
+    assert.deepEqual(matches.sort(), ["docs/spec-a.md"]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
+  }
 });

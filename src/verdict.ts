@@ -11,8 +11,8 @@
 // independent signal: a high-drift level at a confident probability also
 // escalates to DRIFT.
 
-import type { NoulAnswer, ScoreAnswer } from "./client.js";
-import { DRIFT_HEADLINES, SCORE_KEY } from "./questions.js";
+import { validateAnswers, type NoulAnswer, type ScoreAnswer } from "./client.js";
+import { buildQuestions, DRIFT_HEADLINES, SCORE_KEY, SCORE_LEVELS } from "./questions.js";
 
 export type Band = "satisfied" | "violated" | "unclear";
 export type Verdict = "CLEAN" | "REVIEW" | "DRIFT" | "NOT_EVALUATED";
@@ -87,6 +87,12 @@ export function evaluate(input: EvaluateInput): Evaluation {
     };
   }
 
+  try {
+    validateAnswers(answers, buildQuestions().questions);
+  } catch {
+    return { verdict: "NOT_EVALUATED", evaluated: false, questions: [], noulResults: [], reason: "Malformed or incomplete decision answers" };
+  }
+
   const noulResults: NoulResult[] = [];
   let anyViolated = false;
   let anyUnclear = false;
@@ -111,6 +117,7 @@ export function evaluate(input: EvaluateInput): Evaluation {
 
   let headline: HeadlineResult | undefined;
   let headlineDrift = false;
+  let headlineUncertain = false;
   const scoreAnswer = answers[SCORE_KEY];
   if (scoreAnswer && scoreAnswer.type === "score") {
     const sa = scoreAnswer as ScoreAnswer;
@@ -124,10 +131,11 @@ export function evaluate(input: EvaluateInput): Evaluation {
         topLevel = level;
       }
     }
-    const label = sa.legend[topLevel] ?? topLevel;
+    const label = SCORE_LEVELS[Number(topLevel)];
     const shortLabel = shortScoreLabel(label);
-    if (DRIFT_HEADLINES.has(shortLabel) && topProb >= thresholds[SCORE_KEY]) {
-      headlineDrift = true;
+    if (DRIFT_HEADLINES.has(shortLabel)) {
+      headlineDrift = topProb >= (thresholds[SCORE_KEY] ?? 0.6);
+      headlineUncertain = !headlineDrift;
     }
     headline = {
       key: SCORE_KEY,
@@ -138,7 +146,7 @@ export function evaluate(input: EvaluateInput): Evaluation {
       confidence: round3(sa.confidence),
       threshold: thresholds[SCORE_KEY] ?? 0.6,
       distribution: Object.fromEntries(
-        Object.entries(probs).map(([k, v]) => [sa.legend[k] ?? k, round3(Number(v))]),
+        Object.entries(probs).map(([k, v]) => [SCORE_LEVELS[Number(k)], round3(Number(v))]),
       ),
     };
   }
@@ -146,7 +154,7 @@ export function evaluate(input: EvaluateInput): Evaluation {
   let verdict: Verdict;
   const minorDrift = headline?.label.startsWith("Minor drift");
   if (anyViolated || headlineDrift) verdict = "DRIFT";
-  else if (anyUnclear || minorDrift) verdict = "REVIEW";
+  else if (anyUnclear || minorDrift || headlineUncertain) verdict = "REVIEW";
   else verdict = "CLEAN";
 
   const questions: (NoulResult | HeadlineResult)[] = [...noulResults];

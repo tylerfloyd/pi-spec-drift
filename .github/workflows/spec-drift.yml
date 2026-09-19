@@ -1,59 +1,44 @@
 name: Spec Drift (reusable)
 
-# Called from other repositories:
-#   jobs:
-#     spec-drift:
-#       permissions: { pull-requests: write }
-#       uses: tylerfloyd/pi-spec-drift/.github/workflows/spec-drift.yml@main
-#       secrets:
-#         TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
-#         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-#       with:
-#         owner: ${{ github.event.pull_request.base.repo.owner.login }}
-#         repo: ${{ github.event.pull_request.base.repo.name }}
-#         pr-number: ${{ github.event.pull_request.number }}
-#         base: ${{ github.event.pull_request.base.sha }}
-#         head: ${{ github.event.pull_request.head.sha }}
-#         pr-title: ${{ github.event.pull_request.title }}
-#         pr-desc: ${{ github.event.pull_request.body }}
-#         spec-glob: "PRODUCT.md,TECH.md,docs/spec*.md"
-#         block: "false"
-
 on:
   workflow_call:
     inputs:
       owner:
+        type: string
         required: true
       repo:
+        type: string
         required: true
       pr-number:
+        type: number
         required: true
       base:
+        type: string
         required: true
       head:
+        type: string
         required: true
       pr-title:
-        required: false
+        type: string
         default: ""
       pr-desc:
-        required: false
+        type: string
         default: ""
       spec-glob:
-        required: false
+        type: string
+        default: ""
+      model:
+        type: string
         default: ""
       block:
-        required: false
+        type: string
         default: "false"
       bot-ref:
-        required: false
-        default: "main"
-      repository:
-        required: false
-        default: "tylerfloyd/pi-spec-drift"
+        description: "Explicit trusted bot ref; pin to the same commit as this workflow. Never use the PR head."
+        type: string
+        required: true
     secrets:
       TYPESAFE_API_KEY:
-        required: true
-      GITHUB_TOKEN:
         required: true
 
 permissions:
@@ -64,20 +49,54 @@ jobs:
   review:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout the pull request
+      - name: Validate review target
+        uses: actions/github-script@v7
+        env:
+          OWNER: ${{ inputs.owner }}
+          REPO: ${{ inputs.repo }}
+          PR_NUMBER: ${{ inputs.pr-number }}
+          BASE: ${{ inputs.base }}
+          HEAD: ${{ inputs.head }}
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            if (!pr || process.env.OWNER !== context.repo.owner || process.env.REPO !== context.repo.repo ||
+                Number(process.env.PR_NUMBER) !== pr.number || process.env.BASE !== pr.base.sha || process.env.HEAD !== pr.head.sha) {
+              throw new Error('Inputs must match the triggering pull request');
+            }
+
+      - name: Checkout trusted bot source
+        uses: actions/checkout@v4
+        with:
+          repository: tylerfloyd/pi-spec-drift
+          ref: ${{ inputs.bot-ref }}
+          path: _specdrift
+          persist-credentials: false
+
+      - name: Checkout pull request as data only
         uses: actions/checkout@v4
         with:
           repository: ${{ inputs.owner }}/${{ inputs.repo }}
-          ref: ${{ inputs.head }}
+          ref: refs/pull/${{ inputs.pr-number }}/head
+          path: _review
           fetch-depth: 0
+          persist-credentials: false
 
-      - name: Run spec-drift review
-        uses: ./action.yml
+      - name: Verify reviewed commit
+        shell: bash
+        env:
+          EXPECTED_HEAD: ${{ inputs.head }}
+        run: |
+          test "$(git -C "$GITHUB_WORKSPACE/_review" rev-parse HEAD)" = "$EXPECTED_HEAD"
+
+      - name: Run trusted review action
+        id: review
+        uses: ./_specdrift
         with:
           api-key: ${{ secrets.TYPESAFE_API_KEY }}
-          repository: ${{ inputs.repository }}
-          bot-ref: ${{ inputs.bot-ref }}
+          root: ${{ github.workspace }}/_review
           spec-glob: ${{ inputs.spec-glob }}
+          model: ${{ inputs.model }}
           block: ${{ inputs.block }}
           base: ${{ inputs.base }}
           head: ${{ inputs.head }}
@@ -85,21 +104,25 @@ jobs:
           pr-desc: ${{ inputs.pr-desc }}
           repo-label: ${{ inputs.owner }}/${{ inputs.repo }}
 
-      - name: Post report to the pull request
-        if: always()
+      - name: Post freshly generated report
+        if: ${{ always() && steps.review.outputs.report-md != '' }}
         uses: actions/github-script@v7
+        env:
+          REPORT_PATH: ${{ steps.review.outputs.report-md }}
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const fs = require("fs");
-            const file = process.env.GITHUB_WORKSPACE + "/.specdrift-report.md";
-            const body = fs.existsSync(file)
-              ? fs.readFileSync(file, "utf8")
-              : "> ⛔ Spec drift review did not produce a report.";
+            const fs = require('fs');
+            const path = require('path');
+            const file = path.resolve(process.env.REPORT_PATH);
+            const temp = fs.realpathSync(process.env.RUNNER_TEMP) + path.sep;
+            if (!fs.existsSync(file)) {
+              core.warning('Review failed without producing a report');
+              return;
+            }
+            if (!fs.realpathSync(file).startsWith(temp)) throw new Error('Report must be in runner temporary storage');
+            const body = fs.readFileSync(file, 'utf8');
             await github.rest.issues.createComment({
-              owner: "${{ inputs.owner }}",
-              repo: "${{ inputs.repo }}",
-              issue_number: Number("${{ inputs.pr-number }}"),
+              ...context.repo,
+              issue_number: context.payload.pull_request.number,
               body,
             });
-            core.info("posted spec-drift report to PR #" + "${{ inputs.pr-number }}");

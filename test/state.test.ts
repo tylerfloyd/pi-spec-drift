@@ -51,3 +51,46 @@ test("empty spec yields a placeholder", () => {
   const s = buildState({ specFiles: [], diff: "diff" });
   assert.ok(s.spec.content.includes("no spec content"));
 });
+
+test("redacts and bounds the PR title in the payload", () => {
+  const s = buildState({
+    specFiles: [],
+    diff: "diff",
+    pr: { title: "fix: ghp_1234567890abcdef1234567890abcdef " + "x".repeat(500) },
+  });
+  const title = s.pull_request?.title ?? "";
+  assert.ok(!title.includes("ghp_1234567890abcdef"), `title not redacted: ${title.slice(-60)}`);
+  assert.ok(title.length < 400, `title not bounded: ${title.length}`);
+});
+
+test("bounds the PR description in the payload", () => {
+  const s = buildState({
+    specFiles: [],
+    diff: "diff",
+    pr: { description: "y".repeat(20000) },
+  });
+  const desc = s.pull_request?.description ?? "";
+  assert.ok(desc.length < 20000, `description not bounded: ${desc.length}`);
+});
+
+test("spec budget is shared across files, not multiplied by the per-file floor", () => {
+  const files = Array.from({ length: 10 }, (_, i) => ({
+    path: `s${i}.md`,
+    content: "z".repeat(1000),
+  }));
+  const s = buildState({ specFiles: files, diff: "diff", maxSpecChars: 1000 });
+  // 10 files share the 1000-char budget; the old max(2000, ...) floor let
+  // this grow to ~20k chars. Allow some headroom for the truncation markers
+  // and file headers, but nowhere near 2x the budget.
+  assert.ok(s.spec.content.length <= 1000 + 10 * 60, `got ${s.spec.content.length}`);
+  assert.ok(s.spec.content.includes("[truncated"), "each over-budget file is truncated");
+});
+
+test("redacts secret-looking text in spec file paths", () => {
+  const s = buildState({
+    specFiles: [{ path: "specs/ghp_1234567890abcdef1234567890abcdef.md", content: "text" }],
+    diff: "diff",
+  });
+  assert.ok(!s.spec.content.includes("ghp_1234567890abcdef"), s.spec.content);
+  assert.ok(!s.spec.files.join(",").includes("ghp_1234567890abcdef"), s.spec.files.join(","));
+});

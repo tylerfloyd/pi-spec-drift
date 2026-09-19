@@ -43,7 +43,7 @@ interface CliOptions {
 
 const VERSION = "0.1.0";
 
-const BOOLEANS = new Set(["block", "json", "dry-run"]);
+const BOOLEANS = new Set(["block", "json", "dry-run", "version", "help"]);
 
 function parseArgs(argv: string[]): CliOptions {
   const opts: CliOptions = { command: "review" };
@@ -70,6 +70,10 @@ function parseArgs(argv: string[]): CliOptions {
 
 function assign(opts: CliOptions, key: string, val: string | undefined): void {
   switch (key) {
+    case "version":
+    case "help":
+      opts.command = key;
+      break;
     case "command":
       if (val) opts.command = val;
       break;
@@ -167,7 +171,7 @@ async function main(argv: string[]): Promise<void> {
   const overrides = {
     specFiles: csv(opts.specGlob),
     model: opts.model,
-    blockOnDrift: opts.block ? true : undefined,
+    blockOnDrift: opts.block,
   };
   const cfg = loadConfig(root, overrides);
 
@@ -190,6 +194,9 @@ async function main(argv: string[]): Promise<void> {
     }
   } else if (opts.base || opts.head) {
     process.stderr.write("specdrift: --base and --head must be given together (or use --diff-file)\n");
+    process.exit(2);
+  } else {
+    process.stderr.write("specdrift: provide --diff-file or both --base and --head\n");
     process.exit(2);
   }
 
@@ -242,13 +249,19 @@ async function main(argv: string[]): Promise<void> {
       return;
     }
 
-    if (filtered.diff.trim().length === 0) {
+    if (rawDiff.trim() && !filtered.diff.trim()) {
+      ev = notEvaluated(filtered.droppedFiles.length
+        ? "All changed files were excluded; no change was evaluated. Check excludeGlobs."
+        : "Nonempty input contained no supported git diff sections.", cfg.model);
+    } else if (filtered.diff.trim().length === 0) {
       ev = noChanges();
     } else if (specFiles.length === 0) {
       ev = notEvaluated(
         `no spec files matched the configured glob (${cfg.specFiles.join(", ")}). Set specFiles in .spec-drift.json or pass --spec-glob.`,
         cfg.model,
       );
+    } else if (specFiles.every((f) => !f.content.trim())) {
+      ev = notEvaluated("All matched spec files are empty.", cfg.model);
     } else {
       const apiKey = process.env.TYPESAFE_API_KEY;
       if (!apiKey) {
@@ -290,6 +303,7 @@ async function main(argv: string[]): Promise<void> {
     base: opts.base,
     head: opts.head,
     prTitle: opts.prTitle,
+    blocking: cfg.blockOnDrift,
     specFiles: specFiles.map((f) => f.path),
     changedFiles: filtered.changedFiles,
   };

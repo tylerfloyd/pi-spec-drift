@@ -1,80 +1,84 @@
 name: "Spec Drift Review"
-description: "Review a change against the spec using Jev (TypeSafe). Writes a markdown report and a JSON summary into the workspace."
+description: "Review a change against its spec using Jev. Run only a trusted, pinned copy of this action."
 inputs:
   api-key:
-    description: "TypeSafe API key (from the TYPESAFE_API_KEY repository secret)."
+    description: "TypeSafe API key."
     required: true
-  repository:
-    description: "Git repository that contains the pi-spec-drift source to build and run."
+  root:
+    description: "Absolute path to the repository under review."
     required: false
-    default: "tylerfloyd/pi-spec-drift"
-  bot-ref:
-    description: "Branch, tag, or commit of the pi-spec-drift source to run."
-    required: false
-    default: "main"
+    default: "${{ github.workspace }}"
   spec-glob:
-    description: "Comma-separated glob(s) for spec files. Overrides the repo's .spec-drift.json."
+    description: "Comma-separated spec globs."
     required: false
   block:
-    description: "Set to \"true\" to fail the run on clear drift. Default: advisory."
-    required: false
+    description: "Whether clear drift fails the check."
     default: "false"
   model:
-    description: "TypeSafe model alias."
+    description: "Optional model override."
     required: false
-    default: "jev-latest"
   base:
-    description: "Base git ref to diff against (used with head)."
-    required: false
+    description: "Base revision (required with head)."
+    required: true
   head:
-    description: "Head git ref to diff from."
-    required: false
+    description: "Head revision."
+    required: true
   pr-title:
-    description: "Pull request title (context for Jev)."
+    description: "PR title, treated as data."
     required: false
   pr-desc:
-    description: "Pull request description (context for Jev)."
+    description: "PR description, treated as data."
     required: false
   repo-label:
-    description: "owner/repo label for the report footer."
+    description: "Repository label."
     required: false
+outputs:
+  report-md:
+    description: "Fresh report path outside the reviewed checkout. May not exist if execution failed early."
+    value: ${{ steps.review.outputs.report-md }}
+  report-json:
+    description: "Fresh JSON report path."
+    value: ${{ steps.review.outputs.report-json }}
 runs:
-  using: "composite"
+  using: composite
   steps:
-    - name: Fetch pi-spec-drift source
-      uses: actions/checkout@v4
-      with:
-        repository: ${{ inputs.repository }}
-        ref: ${{ inputs.bot-ref }}
-        path: _specdrift
-
     - name: Set up Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: 20
-
-    - name: Install and build
-      working-directory: _specdrift
+        node-version: 22
+    - name: Build trusted bot source
+      working-directory: ${{ github.action_path }}
       shell: bash
-      run: npm ci && npm run build
-
-    - name: Run spec-drift review
-      working-directory: _specdrift
+      run: npm ci --ignore-scripts && npm run build
+    - name: Run review
+      id: review
       shell: bash
       env:
         TYPESAFE_API_KEY: ${{ inputs.api-key }}
+        BOT_PATH: ${{ github.action_path }}
+        REVIEW_ROOT: ${{ inputs.root }}
+        INPUT_GLOB: ${{ inputs.spec-glob }}
+        INPUT_MODEL: ${{ inputs.model }}
+        INPUT_BASE: ${{ inputs.base }}
+        INPUT_HEAD: ${{ inputs.head }}
+        INPUT_TITLE: ${{ inputs.pr-title }}
+        INPUT_DESC: ${{ inputs.pr-desc }}
+        INPUT_REPO: ${{ inputs.repo-label }}
+        INPUT_BLOCK: ${{ inputs.block }}
       run: |
-        ARGS=(review --root "$GITHUB_WORKSPACE" \
-          --report-md "$GITHUB_WORKSPACE/.specdrift-report.md" \
-          --report-json "$GITHUB_WORKSPACE/.specdrift-report.json")
-        [ -n "${{ inputs.spec-glob }}" ] && ARGS+=(--spec-glob "${{ inputs.spec-glob }}")
-        [ -n "${{ inputs.model }}" ] && ARGS+=(--model "${{ inputs.model }}")
-        if [ -n "${{ inputs.base }}" ] && [ -n "${{ inputs.head }}" ]; then
-          ARGS+=(--base "${{ inputs.base }}" --head "${{ inputs.head }}")
-        fi
-        if [ -n "${{ inputs.pr-title }}" ]; then ARGS+=(--pr-title "${{ inputs.pr-title }}"); fi
-        if [ -n "${{ inputs.pr-desc }}" ]; then ARGS+=(--pr-desc "${{ inputs.pr-desc }}"); fi
-        if [ -n "${{ inputs.repo-label }}" ]; then ARGS+=(--repo "${{ inputs.repo-label }}"); fi
-        [ "${{ inputs.block }}" = "true" ] && ARGS+=(--block)
-        echo "specdrift ${ARGS[*]:0:1} (report files: .specdrift-report.md / .json)"
-        node dist/cli.js "${ARGS[@]}"
+        set -euo pipefail
+        REPORT_DIR=$(mktemp -d "$RUNNER_TEMP/specdrift-XXXXXX")
+        printf 'report-md=%s/report.md\nreport-json=%s/report.json\n' "$REPORT_DIR" "$REPORT_DIR" >> "$GITHUB_OUTPUT"
+        ARGS=(review --root "$REVIEW_ROOT"
+          --base "$INPUT_BASE" --head "$INPUT_HEAD"
+          --report-md "$REPORT_DIR/report.md" --report-json "$REPORT_DIR/report.json")
+        if [ -n "$INPUT_GLOB" ]; then ARGS+=(--spec-glob "$INPUT_GLOB"); fi
+        if [ -n "$INPUT_MODEL" ]; then ARGS+=(--model "$INPUT_MODEL"); fi
+        if [ -n "$INPUT_TITLE" ]; then ARGS+=(--pr-title "$INPUT_TITLE"); fi
+        if [ -n "$INPUT_DESC" ]; then ARGS+=(--pr-desc "$INPUT_DESC"); fi
+        if [ -n "$INPUT_REPO" ]; then ARGS+=(--repo "$INPUT_REPO"); fi
+        case "$INPUT_BLOCK" in
+          true|false) ARGS+=("--block=$INPUT_BLOCK") ;;
+          *) echo 'block must be true or false' >&2; exit 2 ;;
+        esac
+        node "$BOT_PATH/dist/cli.js" "${ARGS[@]}"

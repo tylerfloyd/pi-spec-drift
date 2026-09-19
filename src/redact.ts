@@ -50,7 +50,7 @@ const RULES: Rule[] = [
   },
   {
     kind: "bearer",
-    re: /\bBearer\s+[A-Za-z0-9._~+/=-]{16,}/g,
+    re: /\bBearer\s+[A-Za-z0-9._~+/=-]{16,}/gi,
     replace: () => "Bearer [REDACTED:token]",
   },
   {
@@ -62,7 +62,9 @@ const RULES: Rule[] = [
     // NAME=value / NAME: value where the name looks credential-ish.
     // Keeps the variable name so the diff stays readable; redacts the value.
     kind: "secret-assignment",
-    re: /([A-Za-z0-9_]*(?:KEY|TOKEN|SECRET|PASSWD|PASSWORD|CREDENTIAL)[A-Za-z0-9_]*)\s*([=:])\s*([A-Za-z0-9][A-Za-z0-9._~+/=-]{7,})/g,
+    // Identifier runs are bounded to keep scanning linear on large files
+    // (an unbounded [A-Za-z0-9_]* lead made this quadratic).
+    re: /\b([A-Za-z0-9_]{0,64}(?:KEY|TOKEN|SECRET|PASSWD|PASSWORD|CREDENTIAL)[A-Za-z0-9_]{0,64})["']?\s*([=:])\s*(?:"[^"\r\n]+"|'[^'\r\n]+'|[A-Za-z0-9][A-Za-z0-9._~+/=-]{7,})/gi,
     replace: (_m, name: string, sep: string) => `${name}${sep}[REDACTED:secret]`,
   },
 ];

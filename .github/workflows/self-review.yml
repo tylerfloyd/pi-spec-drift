@@ -7,12 +7,14 @@ on:
 jobs:
   spec-drift:
     permissions:
+      contents: read
       pull-requests: write
     uses: tylerfloyd/pi-spec-drift/.github/workflows/spec-drift.yml@main
     secrets:
       TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     with:
+      # Dogfood trusted main explicitly. External callers should pin both refs.
+      bot-ref: main
       owner: ${{ github.event.pull_request.base.repo.owner.login }}
       repo: ${{ github.event.pull_request.base.repo.name }}
       pr-number: ${{ github.event.pull_request.number }}

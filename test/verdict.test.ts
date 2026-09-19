@@ -109,3 +109,51 @@ test("usage and model are carried through", () => {
   assert.deepEqual(ev.usage, { input_tokens: 100, output_tokens: 20 });
   assert.equal(ev.model, "jev-latest");
 });
+
+test("sub-threshold significant-drift headline -> REVIEW, not CLEAN", () => {
+  const a = baseAnswers();
+  // modal level is "Significant drift" but below the 0.6 headline threshold
+  a[SCORE_KEY] = score({ "0": 0.44, "1": 0.06, "2": 0.45, "3": 0.05 });
+  const ev = evaluate({ ...opts, answers: a, evaluated: true });
+  assert.equal(ev.verdict, "REVIEW");
+});
+
+test("sub-threshold contradiction headline -> REVIEW, not CLEAN", () => {
+  const a = baseAnswers();
+  // modal level is "Contradiction" but below the 0.6 headline threshold
+  a[SCORE_KEY] = score({ "0": 0.25, "1": 0.1, "2": 0.2, "3": 0.45 });
+  const ev = evaluate({ ...opts, answers: a, evaluated: true });
+  assert.equal(ev.verdict, "REVIEW");
+});
+
+test("unknown level in the response -> NOT_EVALUATED (fail closed)", () => {
+  const a = baseAnswers();
+  a[SCORE_KEY] = {
+    type: "score",
+    score: 0.5,
+    legend: { "wat": "mystery level" },
+    probabilities: { "wat": 1 },
+    confidence: 0.5,
+  };
+  const ev = evaluate({ ...opts, answers: a, evaluated: true });
+  assert.equal(ev.verdict, "NOT_EVALUATED");
+  assert.ok(ev.reason);
+});
+
+test("classification uses documented indexes, not returned legend wording", () => {
+  const a = baseAnswers();
+  a[SCORE_KEY] = {
+    type: "score",
+    score: 0,
+    legend: {
+      "0": "Tampered level text",
+      "1": SCORE_LEVELS[1],
+      "2": SCORE_LEVELS[2],
+      "3": SCORE_LEVELS[3],
+    },
+    probabilities: { "0": 0, "1": 0, "2": 0, "3": 1 },
+    confidence: 1,
+  };
+  const ev = evaluate({ ...opts, answers: a, evaluated: true });
+  assert.equal(ev.verdict, "DRIFT");
+});

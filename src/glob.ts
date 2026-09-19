@@ -65,6 +65,8 @@ function walk(root: string, dir: string, out: string[]): void {
   }
   for (const entry of entries) {
     if (entry.name === ".git" || entry.name === "node_modules" || entry.name === "_specdrift") continue;
+    // Never follow symlinks, including files that could expose data outside root.
+    if (entry.isSymbolicLink()) continue;
     const full = join(dir, entry.name);
     let stat;
     try {
