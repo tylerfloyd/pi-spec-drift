@@ -36,6 +36,13 @@ Correctness fixes from the pre-merge code review.
   documented default and otherwise fails closed.
 - Report: `safeText` also escapes `[]()`, so an untrusted PR title or repository
   name cannot plant a markdown link in the bot's own comment.
+- Reusable workflow: `block` defaulted to `"false"` and was always forwarded to
+  the action, which re-created the override the action-level fix removed — the
+  reviewed repo's `blockOnDrift` was still ignored. It now defaults to empty.
+- Self-review: pull requests from forks are skipped rather than run. They get no
+  repository secrets, so the bot could not reach Jev and failed closed on every
+  outside contribution, showing a red check the contributor had no way to fix.
+- Added `CONTRIBUTING.md`.
 - Report JSON: the headline row published Jev's `score` under the generic
   `value` field. Per the [Score contract](https://docs.typesafe.ai/primitives/score)
   that field is the probability-weighted mean over level *indexes* (0–3 here),

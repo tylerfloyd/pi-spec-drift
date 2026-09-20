@@ -105,6 +105,16 @@ the mode (a 45/55 split across *No drift* and *Contradiction* has a mean of
 - The reusable workflow requires explicit trusted `bot-ref`; production callers
   pin it and the workflow to the same reviewed commit. Fork/Dependabot runs may
   lack secrets/write permissions and are not automatically privileged.
+- The `block` input defaults to empty at both the workflow and action layer. An
+  empty value is not forwarded to the CLI, so the reviewed repository's
+  `.spec-drift.json` / `SPEC_DRIFT_BLOCK` decides. Passing `true`/`false`
+  explicitly is a CLI flag and overrides both, by design.
+- The self-review workflow **skips** pull requests opened from forks. Those runs
+  receive no repository secrets, so the bot cannot reach Jev and would fail
+  closed on every outside contribution — a check the contributor cannot fix.
+  Fail-closed protects a verdict that was attempted; it is not a reason to
+  report a failure for a review that was never possible. Fork pull requests are
+  reviewed by hand (see CONTRIBUTING.md).
 
 ## 8. Boundaries
 

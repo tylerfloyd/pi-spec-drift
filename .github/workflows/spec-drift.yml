@@ -31,8 +31,9 @@ on:
         type: string
         default: ""
       block:
+        description: "true/false to force blocking. Leave empty to defer to the reviewed repo's .spec-drift.json / SPEC_DRIFT_BLOCK."
         type: string
-        default: "false"
+        default: ""
       bot-ref:
         description: "Explicit trusted bot ref; pin to the same commit as this workflow. Never use the PR head."
         type: string

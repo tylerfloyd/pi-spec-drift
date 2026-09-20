@@ -6,6 +6,11 @@ on:
 
 jobs:
   spec-drift:
+    # Pull requests from forks do not receive repository secrets, so the bot
+    # cannot reach Jev and would fail closed (NOT_EVALUATED) on every outside
+    # contribution — a red check the contributor has no way to fix. Skip it
+    # there and review those PRs by hand. See CONTRIBUTING.md.
+    if: github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       contents: read
       pull-requests: write

@@ -134,6 +134,19 @@ test("action only passes --block when the input is set", () => {
   assert.match(script, /""\)\s*;;/, "empty INPUT_BLOCK must be a no-op case");
 });
 
+// 4b — the reusable workflow must not reintroduce the forced --block either.
+test("reusable workflow defers block to the reviewed repo by default", () => {
+  const wf = readFileSync(".github/workflows/spec-drift.yml", "utf8");
+  const blockInput = wf.match(/ {6}block:\n(?: {8}.*\n)+/)?.[0] ?? "";
+  assert.ok(blockInput, "spec-drift.yml must declare a block input");
+  assert.match(blockInput, /default:\s*""/, `block must default to empty:\n${blockInput}`);
+});
+
+test("self-review skips fork PRs, which cannot reach the API", () => {
+  const wf = readFileSync(".github/workflows/self-review.yml", "utf8");
+  assert.match(wf, /if:\s*github\.event\.pull_request\.head\.repo\.full_name == github\.repository/);
+});
+
 // 5 — `--block false` must not mean `--block true`.
 function cliBlockFlag(args: string[]): Promise<string> {
   const dir = mkdtempSync(join(tmpdir(), "specdrift-block-"));

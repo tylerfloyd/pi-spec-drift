@@ -182,6 +182,12 @@ diff, and the matched spec are sent to TypeSafe, all **redacted and bounded**;
 the API key is a repository secret never printed; and when Jev cannot be
 reached the bot **fails closed** rather than approving.
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). The short version: `docs/design.md` is
+the spec, behavior changes must update it in the same pull request, and you
+need Node 22+ to run the test suite.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
