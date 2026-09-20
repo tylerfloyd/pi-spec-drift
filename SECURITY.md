@@ -1,6 +1,6 @@
 # Security
 
-pi-spec-drift sends a slice of your repository to a third-party API
+spec-drift sends a slice of your repository to a third-party API
 (TypeSafe) in order to get its judgments. This document describes what is sent
 and what the bot will never do.
 

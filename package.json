@@ -1,18 +1,16 @@
 {
-  "name": "pi-spec-drift",
+  "name": "spec-drift",
   "version": "0.1.0",
-  "description": "A spec-drift review bot for Pi, backed by Jev (TypeSafe). Reviews a change against your spec and reports drift with calibrated probabilities.",
+  "description": "A spec-drift review bot for GitHub, backed by Jev (TypeSafe). Reviews a change against your spec and reports drift with calibrated probabilities.",
   "type": "module",
   "license": "MIT",
   "author": "Boyd",
-  "homepage": "https://github.com/tylerfloyd/pi-spec-drift",
+  "homepage": "https://github.com/tylerfloyd/spec-drift",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tylerfloyd/pi-spec-drift.git"
+    "url": "git+https://github.com/tylerfloyd/spec-drift.git"
   },
   "keywords": [
-    "pi",
-    "pi-package",
     "spec",
     "spec-drift",
     "typesafe",

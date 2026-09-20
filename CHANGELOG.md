@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+Renamed the project from `pi-spec-drift` to `spec-drift`.
+
+- Nothing in `src/` or `test/` was ever Pi-specific: the only occurrences of the
+  old name were the tool's own name in help text, the report footer and a test
+  fixture. The bot depends on git, GitHub Actions and the Jev API, and works on
+  any repository with spec files, so the name now says what it is.
+- The GitHub repository is renamed too (GitHub keeps a redirect from the old
+  URL). `uses:` references, `package.json`, docs and the report footer follow.
+- The CLI binary is unchanged: it was already `specdrift`.
+
 Correctness fixes from the pre-merge code review.
 
 - Redaction: the `secret-assignment` rule was case-insensitive and let its

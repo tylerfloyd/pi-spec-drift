@@ -1,4 +1,4 @@
-# Contributing to pi-spec-drift
+# Contributing to spec-drift
 
 Thanks for your interest. This is a small, deliberately narrow tool, and the
 bar for changes is "does it keep the verdict trustworthy?" — please read
@@ -23,8 +23,8 @@ in Node 22.6. (The published `dist/` is plain ES2022 and runs on Node 18+, which
 is what `engines` describes — that's a consumer floor, not a contributor one.)
 
 ```bash
-gh repo fork tylerfloyd/pi-spec-drift --clone   # or fork in the UI and clone
-cd pi-spec-drift
+gh repo fork tylerfloyd/spec-drift --clone   # or fork in the UI and clone
+cd spec-drift
 npm ci
 npm test
 ```

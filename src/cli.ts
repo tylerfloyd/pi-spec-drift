@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// pi-spec-drift CLI.
+// spec-drift CLI.
 //
 // Reads a change (a git range or a diff file) and your spec files, sends a
 // bounded + redacted state to Jev, and prints a drift verdict. In CI the same
@@ -342,7 +342,7 @@ function tryRead(path: string): string | null {
   }
 }
 
-const HELP = `pi-spec-drift ${VERSION}
+const HELP = `spec-drift ${VERSION}
 
 Usage:
   specdrift review [options]
