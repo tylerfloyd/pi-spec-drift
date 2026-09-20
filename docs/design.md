@@ -67,6 +67,14 @@ Each Noul with threshold `t` is classified: **satisfied** if `p ≥ t`,
   legend wording ([TypeSafe Score contract](https://docs.typesafe.ai/primitives/score)).
 - else **CLEAN**.
 
+The verdict reads the headline from `probabilities`: the modal level supplies
+the label, and *that level's probability* is what the threshold is compared
+against. Jev's `score` field is a different quantity — the probability-weighted
+mean over level indexes, which can land between levels and need not agree with
+the mode (a 45/55 split across *No drift* and *Contradiction* has a mean of
+1.65, i.e. "Minor drift", a level with zero probability). It is reported as
+`headline.expectedLevel` for context and never compared against a threshold.
+
 ## 6. Fail-closed guarantees
 
 - If no `TYPESAFE_API_KEY` is available, the verdict is **NOT EVALUATED** and

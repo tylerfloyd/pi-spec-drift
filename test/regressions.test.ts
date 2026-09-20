@@ -9,9 +9,36 @@ import { join } from "node:path";
 import { redact } from "../dist/redact.js";
 import { filterDiff } from "../dist/diff.js";
 import { loadConfig } from "../dist/config.js";
-import { buildQuestions } from "../dist/questions.js";
+import { buildQuestions, DEFAULT_THRESHOLDS, SCORE_KEY, SCORE_LEVELS } from "../dist/questions.js";
 import { evaluate } from "../dist/verdict.js";
-import { renderMarkdown } from "../dist/report.js";
+import { renderMarkdown, renderJson } from "../dist/report.js";
+
+const CLEAN_PROBS = { "0": 1, "1": 0, "2": 0, "3": 0 };
+
+const NOUL_KEYS = [
+  "conforms_to_spec",
+  "spec_still_accurate",
+  "behavior_is_spec_covered",
+  "within_stated_scope",
+  "intent_matches_diff",
+];
+
+function answerSet(
+  nouls: Record<string, number>,
+  probabilities: Record<string, number>,
+  score: number,
+) {
+  const out: Record<string, unknown> = {};
+  for (const k of NOUL_KEYS) out[k] = { type: "noul", noul: nouls[k] ?? 0.95 };
+  out[SCORE_KEY] = {
+    type: "score",
+    score,
+    confidence: 0.4,
+    legend: Object.fromEntries(SCORE_LEVELS.map((l, i) => [String(i), l])),
+    probabilities,
+  };
+  return out as never;
+}
 
 function withRoot<T>(files: Record<string, string>, fn: (root: string) => T): T {
   const dir = mkdtempSync(join(tmpdir(), "specdrift-regress-"));
@@ -211,11 +238,31 @@ test("filterDiff handles a deletion whose +++ side is /dev/null", () => {
 
 // 7 — a Noul with no threshold must not silently vanish from the verdict.
 test("a violated noul with no threshold in the map fails closed", () => {
-  const answers = {
-    conforms_to_spec: { type: "noul", noul: 0.02 },
-  } as never;
-  const ev = evaluate(answers, {}, {});
-  assert.notEqual(ev.verdict, "CLEAN");
+  const answers = answerSet({ conforms_to_spec: 0.02 }, CLEAN_PROBS, 0.1);
+  // Sanity: with the real thresholds this same answer set is a DRIFT, so the
+  // assertion below cannot pass merely because the answers were rejected.
+  assert.equal(
+    evaluate({ answers, thresholds: DEFAULT_THRESHOLDS, labels: {}, evaluated: true }).verdict,
+    "DRIFT",
+  );
+  // An empty map falls back to the documented defaults rather than dropping
+  // the dimension, so the violated Noul still reaches the verdict.
+  const ev = evaluate({ answers, thresholds: {}, labels: {}, evaluated: true });
+  assert.equal(ev.verdict, "DRIFT");
+  assert.equal(ev.noulResults.length, NOUL_KEYS.length);
+});
+
+test("a dimension with neither a threshold nor a default fails closed", () => {
+  const answers = answerSet({}, CLEAN_PROBS, 0.1) as unknown as Record<string, unknown>;
+  answers.made_up_dimension = { type: "noul", noul: 0.01 };
+  const ev = evaluate({
+    answers: answers as never,
+    thresholds: DEFAULT_THRESHOLDS,
+    labels: {},
+    evaluated: true,
+  });
+  assert.equal(ev.verdict, "NOT_EVALUATED");
+  assert.match(ev.reason ?? "", /made_up_dimension/);
 });
 
 // 8 — markdown metacharacters in untrusted text must not build a link.
@@ -225,4 +272,54 @@ test("safeText neutralises markdown link syntax in a PR title", () => {
     { repository: "[evil](https://example.com)" },
   );
   assert.ok(!md.includes("[evil](https://example.com)"), md);
+});
+
+// 9 — Jev's `score` is a probability-weighted mean over level indexes, not the
+// modal index (https://docs.typesafe.ai/primitives/score). Reporting it as the
+// generic `value` put it in the same field as a Noul probability and next to a
+// probability `threshold`, so `value >= threshold` was meaningless.
+// 45% "No drift" (0), 55% "Contradiction" (3) => weighted mean 1.65, mode 3.
+function bimodalEvaluation() {
+  return answerSet({}, { "0": 0.45, "1": 0, "2": 0, "3": 0.55 }, 1.65);
+}
+
+test("headline separates the expected level from the modal level", () => {
+  const ev = evaluate({
+    answers: bimodalEvaluation(),
+    thresholds: DEFAULT_THRESHOLDS,
+    labels: {},
+    evaluated: true,
+  });
+  const h = ev.headline!;
+  assert.equal(h.expectedLevel, 1.65, "expectedLevel is Jev's weighted mean");
+  assert.equal(h.modalLevel, 3, "modalLevel is the argmax of probabilities");
+  assert.equal(h.levelProbability, 0.55, "levelProbability is the modal level's probability");
+  assert.ok(h.label.startsWith("Contradiction"), h.label);
+});
+
+test("json headline row compares a probability against a probability", () => {
+  const ev = evaluate({
+    answers: bimodalEvaluation(),
+    thresholds: DEFAULT_THRESHOLDS,
+    labels: {},
+    evaluated: true,
+  });
+  const doc = JSON.parse(renderJson(ev, false, {}));
+  const row = doc.questions.find((q: { kind: string }) => q.kind === "score");
+  assert.equal(row.value, ev.headline!.levelProbability);
+  assert.equal(row.threshold, ev.headline!.threshold);
+  assert.ok(row.value <= 1 && row.threshold <= 1, JSON.stringify(row));
+});
+
+test("json headline carries both levels without losing the weighted mean", () => {
+  const ev = evaluate({
+    answers: bimodalEvaluation(),
+    thresholds: DEFAULT_THRESHOLDS,
+    labels: {},
+    evaluated: true,
+  });
+  const doc = JSON.parse(renderJson(ev, false, {}));
+  assert.equal(doc.headline.expectedLevel, 1.65);
+  assert.equal(doc.headline.modalLevel, 3);
+  assert.equal(doc.headline.probability, 0.55);
 });

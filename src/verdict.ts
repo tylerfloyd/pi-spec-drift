@@ -29,9 +29,17 @@ export interface NoulResult {
 export interface HeadlineResult {
   key: string;
   kind: "score";
-  value: number;
   label: string;
+  // Probability of the modal level. This — not expectedLevel — is the quantity
+  // `threshold` is compared against, and the two share units.
   levelProbability: number;
+  // Jev's `score`: the probability-weighted mean over level *indexes*, so it
+  // can land between levels and need not agree with modalLevel
+  // (https://docs.typesafe.ai/primitives/score). Reported for context only;
+  // comparing it against `threshold`, which is a probability, is meaningless.
+  expectedLevel: number;
+  // Index of the modal level — where `label` comes from.
+  modalLevel: number;
   confidence: number;
   threshold: number;
   distribution: Record<string, number>;
@@ -152,9 +160,10 @@ export function evaluate(input: EvaluateInput): Evaluation {
     headline = {
       key: SCORE_KEY,
       kind: "score",
-      value: round3(sa.score),
       label: shortLabel,
       levelProbability: round3(topProb),
+      expectedLevel: round3(sa.score),
+      modalLevel: Number(topLevel),
       confidence: round3(sa.confidence),
       threshold: thresholds[SCORE_KEY] ?? 0.6,
       distribution: Object.fromEntries(

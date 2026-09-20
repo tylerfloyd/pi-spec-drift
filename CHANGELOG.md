@@ -36,6 +36,16 @@ Correctness fixes from the pre-merge code review.
   documented default and otherwise fails closed.
 - Report: `safeText` also escapes `[]()`, so an untrusted PR title or repository
   name cannot plant a markdown link in the bot's own comment.
+- Report JSON: the headline row published Jev's `score` under the generic
+  `value` field. Per the [Score contract](https://docs.typesafe.ai/primitives/score)
+  that field is the probability-weighted mean over level *indexes* (0–3 here),
+  while the sibling `threshold` is a probability (0.6) — so a consumer applying
+  the array's own `value >= threshold` rule compared incommensurable units and
+  would have flagged almost every change. `value` now carries the modal level's
+  probability for both question kinds, and the weighted mean is reported
+  explicitly as `headline.expectedLevel` alongside `headline.modalLevel`. The
+  verdict logic was already correct and is unchanged; only the published numbers
+  were wrong.
 
 Security and fail-closed hardening (pre-merge review pass).
 

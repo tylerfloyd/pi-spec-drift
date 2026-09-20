@@ -124,7 +124,13 @@ export function renderMarkdown(ev: Evaluation, meta: ReportMeta): string {
 export interface ReportJson {
   verdict: string;
   shouldFail: boolean;
-  headline?: { label: string; probability: number; confidence: number };
+  headline?: {
+    label: string;
+    probability: number;
+    confidence: number;
+    expectedLevel: number;
+    modalLevel: number;
+  };
   questions: Array<{ key: string; kind: string; value: number; band?: string; threshold: number }>;
   usage?: { input_tokens: number; output_tokens: number };
   model?: string;
@@ -146,7 +152,10 @@ export function renderJson(
       const item: ReportJson["questions"][number] = {
         key: q.key,
         kind: q.kind,
-        value: q.kind === "noul" ? q.p : q.value,
+        // Both kinds report the probability that `threshold` is compared
+        // against. The Score's weighted mean lives under headline.expectedLevel
+        // — it is a level index, not a probability, and does not belong here.
+        value: q.kind === "noul" ? q.p : q.levelProbability,
         threshold: q.threshold,
       };
       if (q.kind === "noul") item.band = q.band;
@@ -158,6 +167,8 @@ export function renderJson(
       label: ev.headline.label,
       probability: ev.headline.levelProbability,
       confidence: ev.headline.confidence,
+      expectedLevel: ev.headline.expectedLevel,
+      modalLevel: ev.headline.modalLevel,
     };
   }
   if (ev.usage) doc.usage = ev.usage;
