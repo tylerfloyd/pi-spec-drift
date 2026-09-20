@@ -167,7 +167,9 @@ export function renderJson(
 }
 
 function safeText(text: string): string {
-  return truncateHead(redact(text).text, 2000).replace(/[\r\n]/g, " ").replace(/[&<>`]/g, (c) => `&#${c.charCodeAt(0)};`);
+  // []() as well as the HTML set: without them an untrusted PR title or repo
+  // name can plant a markdown link in the bot's own comment.
+  return truncateHead(redact(text).text, 2000).replace(/[\r\n]/g, " ").replace(/[&<>`\[\]()]/g, (c) => `&#${c.charCodeAt(0)};`);
 }
 
 function footer(lines: string[], ev: Evaluation, meta: ReportMeta): string {

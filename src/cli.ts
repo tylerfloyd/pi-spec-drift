@@ -61,6 +61,10 @@ function parseArgs(argv: string[]): CliOptions {
       val = a.slice(eq + 1);
     } else if (!BOOLEANS.has(name.slice(2))) {
       val = argv[++i];
+    } else if (argv[i + 1] === "true" || argv[i + 1] === "false") {
+      // `--block false` used to leave block unset-and-therefore-true while the
+      // bare `false` was dropped as a positional — the opposite of the intent.
+      val = argv[++i];
     }
     const key = name.slice(2).replace(/-([a-z])/g, (_m, c) => c.toUpperCase());
     assign(opts, key, val);

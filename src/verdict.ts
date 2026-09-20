@@ -12,7 +12,7 @@
 // escalates to DRIFT.
 
 import { validateAnswers, type NoulAnswer, type ScoreAnswer } from "./client.js";
-import { buildQuestions, DRIFT_HEADLINES, SCORE_KEY, SCORE_LEVELS } from "./questions.js";
+import { buildQuestions, DEFAULT_THRESHOLDS, DRIFT_HEADLINES, SCORE_KEY, SCORE_LEVELS } from "./questions.js";
 
 export type Band = "satisfied" | "violated" | "unclear";
 export type Verdict = "CLEAN" | "REVIEW" | "DRIFT" | "NOT_EVALUATED";
@@ -100,8 +100,20 @@ export function evaluate(input: EvaluateInput): Evaluation {
   for (const [key, answer] of Object.entries(answers)) {
     if (answer.type !== "noul") continue;
     const p = clamp01((answer as NoulAnswer).noul);
-    const t = thresholds[key];
-    if (t === undefined) continue;
+    // `evaluate` is public API, so a caller can hand us a partial threshold
+    // map. Skipping the dimension would drop a violated Noul from the verdict
+    // and report CLEAN — the one outcome the fail-closed design forbids. Fall
+    // back to the documented default, and refuse to evaluate if there is none.
+    const t = thresholds[key] ?? DEFAULT_THRESHOLDS[key];
+    if (t === undefined) {
+      return {
+        verdict: "NOT_EVALUATED",
+        evaluated: false,
+        questions: [],
+        noulResults: [],
+        reason: `No threshold configured for dimension "${key}"`,
+      };
+    }
     const b = band(p, t);
     if (b === "violated") anyViolated = true;
     if (b === "unclear") anyUnclear = true;

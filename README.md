@@ -93,6 +93,8 @@ jobs:
       pr-title: ${{ github.event.pull_request.title }}
       pr-desc: ${{ github.event.pull_request.body }}
       spec-glob: "PRODUCT.md,TECH.md,docs/spec*.md"
+      # Omit `block` to let .spec-drift.json / SPEC_DRIFT_BLOCK decide; setting
+      # it here is a CLI flag and therefore overrides both.
       block: "false"
 ```
 

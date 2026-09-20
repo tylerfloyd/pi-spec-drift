@@ -119,8 +119,11 @@ export function buildQuestions(
   const thresholds = { ...DEFAULT_THRESHOLDS };
   if (overrides) {
     for (const k of Object.keys(overrides)) {
-      if (k in thresholds && isFinite(overrides[k]) && overrides[k] > 0.5 && overrides[k] <= 1) {
-        thresholds[k] = overrides[k];
+      // typeof first: isFinite("0.9") coerces, and a string threshold later
+      // reaches toFixed in the report renderer and throws.
+      const v = overrides[k];
+      if (k in thresholds && typeof v === "number" && Number.isFinite(v) && v > 0.5 && v <= 1) {
+        thresholds[k] = v;
       }
     }
   }

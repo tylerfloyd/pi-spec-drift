@@ -12,8 +12,10 @@ inputs:
     description: "Comma-separated spec globs."
     required: false
   block:
-    description: "Whether clear drift fails the check."
-    default: "false"
+    # No default on purpose: an always-present value would be passed as a CLI
+    # flag, and CLI flags outrank .spec-drift.json and SPEC_DRIFT_BLOCK, so a
+    # repo that set blockOnDrift there would be silently downgraded to advisory.
+    description: "Whether clear drift fails the check. Unset defers to .spec-drift.json / SPEC_DRIFT_BLOCK."
   model:
     description: "Optional model override."
     required: false
@@ -78,6 +80,7 @@ runs:
         if [ -n "$INPUT_DESC" ]; then ARGS+=(--pr-desc "$INPUT_DESC"); fi
         if [ -n "$INPUT_REPO" ]; then ARGS+=(--repo "$INPUT_REPO"); fi
         case "$INPUT_BLOCK" in
+          "") ;;
           true|false) ARGS+=("--block=$INPUT_BLOCK") ;;
           *) echo 'block must be true or false' >&2; exit 2 ;;
         esac

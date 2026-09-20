@@ -52,10 +52,7 @@ export function filterDiff(diff: string, excludes: string[]): DiffBundle {
   const dropped: string[] = [];
 
   for (let i = 1; i < sections.length; i++) {
-    const headerLine = sections[i].split("\n", 1)[0] ?? "";
-    // header looks like `a/src/x.ts b/src/x.ts` or `b/src/x.ts`
-    const m = headerLine.match(/ b(\/\S*)$/);
-    const path = m ? m[1].replace(/^\//, "") : headerLine;
+    const path = sectionPath(sections[i]);
     if (path && rx.some((r) => r.test(path))) {
       dropped.push(path);
       continue;
@@ -65,4 +62,27 @@ export function filterDiff(diff: string, excludes: string[]): DiffBundle {
   }
 
   return { diff: kept.join(""), changedFiles: changed, droppedFiles: dropped };
+}
+
+// Recover the file path for one diff section.
+//
+// The `diff --git a/x b/x` header is ambiguous when a path contains a space
+// (git does not quote spaces there), so prefer the `+++ b/...` / `--- a/...`
+// lines, which carry exactly one path each. Only the section preamble is
+// searched: an *added* line whose content starts with "++ " renders as
+// "+++ ..." inside a hunk and would otherwise be mistaken for a header.
+function sectionPath(section: string): string {
+  const preamble = section.split(/\n@@/, 1)[0] ?? "";
+  for (const re of [/^\+\+\+ (.+)$/m, /^--- (.+)$/m]) {
+    const m = preamble.match(re);
+    if (!m) continue;
+    const raw = m[1].trim();
+    if (raw === "/dev/null") continue;
+    return raw.replace(/^[ab]\//, "");
+  }
+  // Binary and mode-only sections have no ---/+++ lines; fall back to the
+  // header, which for those cannot contain a rename pair.
+  const headerLine = section.split("\n", 1)[0] ?? "";
+  const m = headerLine.match(/ b\/(\S*)$/);
+  return m ? m[1] : headerLine;
 }

@@ -2,6 +2,41 @@
 
 ## Unreleased
 
+Correctness fixes from the pre-merge code review.
+
+- Redaction: the `secret-assignment` rule was case-insensitive and let its
+  separator cross newlines, so it rewrote ordinary code (`tokens = tokenize(x)`,
+  `publicKey = derivePublicKey(s)`) and swallowed the line after a bare
+  `API_KEY:` heading. Since the diff and spec are the only evidence the verdict
+  is computed from, this corrupted the model's input. The rule is now
+  case-sensitive (UPPER_SNAKE may carry the word anywhere; mixed-case names must
+  end on it), matches horizontal whitespace only, and rejects a value that is
+  really a call.
+- Action: `block` no longer defaults to `"false"`. It was always forwarded as a
+  CLI flag, which outranks `.spec-drift.json` and `SPEC_DRIFT_BLOCK`, so a repo
+  that set `blockOnDrift: true` was silently downgraded to advisory. An unset
+  input is now a no-op.
+- Config: `maxSpecChars` / `maxDiffChars` are validated as non-negative whole
+  numbers, and thresholds as real numbers in `(0.5, 1]` with known keys. A
+  fractional budget used to throw `Invalid text budget` part-way through state
+  building, and a JSON *string* threshold passed `isFinite` coercion and then
+  crashed `toFixed` in the renderer; both now report a clear configuration
+  error, and an out-of-range threshold is reported rather than silently dropped.
+- CLI: `--block false` set blocking *on* (the space form consumed no value and
+  the bare `false` was dropped as a positional). Boolean flags now accept an
+  explicit `true`/`false` in the space form.
+- Diff parsing: file paths are read from the `+++`/`---` lines rather than the
+  ambiguous `diff --git` header, so paths containing spaces no longer yield
+  garbage entries in `changedFiles` or defeat non-anchored exclude globs. Only
+  the section preamble is searched, so an added line that reads `+++ ...` is not
+  mistaken for a header.
+- Verdict: a Noul with no threshold in the map is no longer skipped — it fell
+  out of the verdict entirely, so a library caller passing a partial threshold
+  map could get `CLEAN` while a dimension was violated. It now falls back to the
+  documented default and otherwise fails closed.
+- Report: `safeText` also escapes `[]()`, so an untrusted PR title or repository
+  name cannot plant a markdown link in the bot's own comment.
+
 Security and fail-closed hardening (pre-merge review pass).
 
 - GitHub Actions: all PR-controlled inputs reach the shell through quoted

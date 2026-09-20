@@ -62,9 +62,21 @@ const RULES: Rule[] = [
     // NAME=value / NAME: value where the name looks credential-ish.
     // Keeps the variable name so the diff stays readable; redacts the value.
     kind: "secret-assignment",
+    //
+    // Deliberately case-sensitive. A case-insensitive name match treated
+    // `tokens`, `tokenize`, `publicKey` and `monkeyPatch` as credentials and
+    // rewrote ordinary code, and the diff is the only evidence the verdict is
+    // computed from — corrupting it is worse than missing an odd spelling. So:
+    //   - UPPER_SNAKE names may carry the word anywhere (SECRET_VALUE, API_KEY),
+    //   - mixed-case names must *end* on the word (apiKey, access_token),
+    //     which excludes `tokens` / `tokenize`.
+    // The separator uses [^\S\r\n] (horizontal space only) so a bare
+    // `API_KEY:` heading cannot swallow the line that follows it.
+    // The lookahead rejects a value that is really a call — `= tokenize(x)` —
+    // while still matching an unquoted literal at end of line.
     // Identifier runs are bounded to keep scanning linear on large files
     // (an unbounded [A-Za-z0-9_]* lead made this quadratic).
-    re: /\b([A-Za-z0-9_]{0,64}(?:KEY|TOKEN|SECRET|PASSWD|PASSWORD|CREDENTIAL)[A-Za-z0-9_]{0,64})["']?\s*([=:])\s*(?:"[^"\r\n]+"|'[^'\r\n]+'|[A-Za-z0-9][A-Za-z0-9._~+/=-]{7,})/gi,
+    re: /\b((?:[A-Z0-9_]{0,64}(?:KEY|TOKEN|SECRET|PASSWD|PASSWORD|CREDENTIAL)[A-Z0-9_]{0,64})|(?:[A-Za-z0-9_]{0,64}(?:[Kk]ey|[Tt]oken|[Ss]ecret|[Pp]asswd|[Pp]assword|[Cc]redential)))["']?[^\S\r\n]*([=:])[^\S\r\n]*(?:"[^"\r\n]+"|'[^'\r\n]+'|[A-Za-z0-9][A-Za-z0-9._~+/=-]{7,}(?![A-Za-z0-9._~+/=-]*\())/g,
     replace: (_m, name: string, sep: string) => `${name}${sep}[REDACTED:secret]`,
   },
 ];
