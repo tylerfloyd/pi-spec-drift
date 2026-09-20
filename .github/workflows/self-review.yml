@@ -1,0 +1,30 @@
+name: Spec Drift (self)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+jobs:
+  spec-drift:
+    # Pull requests from forks do not receive repository secrets, so the bot
+    # cannot reach Jev and would fail closed (NOT_EVALUATED) on every outside
+    # contribution — a red check the contributor has no way to fix. Skip it
+    # there and review those PRs by hand. See CONTRIBUTING.md.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+      pull-requests: write
+    uses: tylerfloyd/pi-spec-drift/.github/workflows/spec-drift.yml@main
+    secrets:
+      TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
+    with:
+      # Dogfood trusted main explicitly. External callers should pin both refs.
+      bot-ref: main
+      owner: ${{ github.event.pull_request.base.repo.owner.login }}
+      repo: ${{ github.event.pull_request.base.repo.name }}
+      pr-number: ${{ github.event.pull_request.number }}
+      base: ${{ github.event.pull_request.base.sha }}
+      head: ${{ github.event.pull_request.head.sha }}
+      pr-title: ${{ github.event.pull_request.title }}
+      pr-desc: ${{ github.event.pull_request.body }}
+      spec-glob: "README.md,docs/design.md"

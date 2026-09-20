@@ -1,0 +1,16 @@
+diff --git a/src/weather.ts b/src/weather.ts
+index 1111111..3333333 100644
+--- a/src/weather.ts
++++ b/src/weather.ts
+@@ -1,5 +1,14 @@
+ export async function run(args: string[]) {
++  if (args.includes("--watch")) {
++    const timer = setInterval(async () => {
++      const fresh = await fetchFromProvider(args[1]);
++      render(fresh);
++    }, 5000);
++    void timer;
++  }
+   const cond = await fetchOnce(args[1]);
+   printConditions(args[1], cond);
+ }

@@ -1,0 +1,13 @@
+diff --git a/src/weather.ts b/src/weather.ts
+index 1111111..4444444 100644
+--- a/src/weather.ts
++++ b/src/weather.ts
+@@ -20,7 +20,7 @@
+ async function fetchOnce(city: string) {
+   const res = await provider.lookup(city);
+   if (!res) {
+-    process.exit(2);
++    process.exit(0);
+   }
+   return res;
+ }
