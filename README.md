@@ -1,13 +1,13 @@
-# pi-spec-drift
+# spec-drift
 
-A **spec-drift review bot** for [Pi](https://pi.dev), backed by
+A **spec-drift review bot** for any GitHub repository, backed by
 [Jev](https://typesafe.ai) (TypeSafe's decision-only model).
 
 It watches a change — a pull-request diff — against your written spec and
 tells you, with calibrated probabilities, whether the code and the spec have
 drifted apart. It runs as a GitHub bot and posts an advisory review to the PR.
 
-pi-spec-drift is **your** tool: the question set, the verdict model, and the
+spec-drift is **your** tool: the question set, the verdict model, and the
 fail-closed guarantees below are the spec that this repository holds itself to.
 See [docs/design.md](docs/design.md) for the authoritative behavior contract.
 
@@ -17,7 +17,7 @@ Code and specs drift apart. A change might quietly do something the spec never
 promised, or fix a bug in a way that makes the spec stale. A human reviewer
 scanning a diff can miss both. Jev does not write prose — it returns a
 calibrated probability (0.0–1.0) for each yes/no question you ask, in a few
-hundred milliseconds. pi-spec-drift asks it a fixed set of drift questions and
+hundred milliseconds. spec-drift asks it a fixed set of drift questions and
 turns the probabilities into a verdict a human can act on.
 
 ## What it does
@@ -80,7 +80,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-    uses: tylerfloyd/pi-spec-drift/.github/workflows/spec-drift.yml@main
+    uses: tylerfloyd/spec-drift/.github/workflows/spec-drift.yml@main
     secrets:
       TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
     with:
@@ -117,7 +117,7 @@ the authenticated evaluation/comment flow. Do not switch to
 `pull_request_target` or expose secrets to untrusted code to work around this.
 See [GitHub's permission rules](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#permissions).
 
-For direct action use, pin `uses: tylerfloyd/pi-spec-drift@<reviewed-sha>` and
+For direct action use, pin `uses: tylerfloyd/spec-drift@<reviewed-sha>` and
 pass `root`, `base`, `head`, and `api-key`. The action builds its own checked-out
 source; it no longer accepts `repository`/`bot-ref` to fetch a second copy.
 Report paths are exposed as `report-md` and `report-json` action outputs.

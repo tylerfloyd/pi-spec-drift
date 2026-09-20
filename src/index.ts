@@ -1,4 +1,4 @@
-// Library entry point for pi-spec-drift.
+// Library entry point for spec-drift.
 
 export {
   systemOne,

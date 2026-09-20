@@ -1,12 +1,12 @@
 # Design & behavior contract
 
-This document is the spec that pi-spec-drift holds *itself* to. A change to
+This document is the spec that spec-drift holds *itself* to. A change to
 this repository is **drift** if it violates a statement below. Keep these
 statements precise: they are the thing the bot reads on its own pull requests.
 
 ## 1. Purpose
 
-pi-spec-drift is a decision tool, not a code generator. Given a code change
+spec-drift is a decision tool, not a code generator. Given a code change
 and a written specification, it decides — and reports — whether the two have
 diverged. It never edits the spec, never edits the code, and never writes
 prose verdicts; the verdict is derived from Jev's probabilities by fixed rules

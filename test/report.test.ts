@@ -4,7 +4,7 @@ import { renderMarkdown, renderJson } from "../dist/report.js";
 import type { Evaluation, NoulResult } from "../dist/verdict.js";
 
 const meta = {
-  repository: "tylerfloyd/pi-spec-drift",
+  repository: "tylerfloyd/spec-drift",
   prTitle: "Add humidity output",
   specFiles: ["spec.md"],
   changedFiles: ["src/weather.ts"],

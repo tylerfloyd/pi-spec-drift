@@ -69,7 +69,7 @@ jobs:
       - name: Checkout trusted bot source
         uses: actions/checkout@v4
         with:
-          repository: tylerfloyd/pi-spec-drift
+          repository: tylerfloyd/spec-drift
           ref: ${{ inputs.bot-ref }}
           path: _specdrift
           persist-credentials: false
